@@ -22,7 +22,7 @@ DOMAIN_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", re.IGNORECASE)
 # A fixed, escaped multi-label suffix at the end of a V2Fly regexp can safely
 # be broadened to that parent domain for routing purposes.
 REGEXP_SUFFIX = re.compile(
-    r"\\.([a-z0-9-]+(?:\\\.[a-z0-9-]+)+)\$$",
+    r"\\\.([a-z0-9-]+(?:\\\.[a-z0-9-]+)+)\$",
     re.IGNORECASE,
 )
 
@@ -183,7 +183,7 @@ def is_covered_by_domain(host: str, domain_roots: set[str]) -> bool:
     return any(host == root or host.endswith("." + root) for root in domain_roots)
 
 
-def render_autoproxy(rules: tuple[DomainRule, ...]) -> tuple[str, dict[str, int]]:
+def render_autoproxy(\n    rules: tuple[DomainRule, ...], min_rule_count: int = MIN_RULE_COUNT\n) -> tuple[str, dict[str, int]]:
     domain_roots = {rule.value for rule in rules if rule.kind == "domain"}
     exact_hosts = {rule.value for rule in rules if rule.kind == "full"}
     keyword_rules = {rule.value for rule in rules if rule.kind == "keyword"}
@@ -239,7 +239,7 @@ def render_autoproxy(rules: tuple[DomainRule, ...]) -> tuple[str, dict[str, int]
             + ", ".join(sorted(missing_roots))
         )
 
-    if len(filters) < MIN_RULE_COUNT:
+    if len(filters) < min_rule_count:
         raise RuntimeError(
             f"Only {len(filters)} AutoProxy filters were generated; "
             f"expected at least {MIN_RULE_COUNT}. Refusing to publish an incomplete list."
