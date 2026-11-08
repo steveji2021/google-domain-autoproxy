@@ -93,7 +93,7 @@ class ConverterTests(unittest.TestCase):
         self.assertIn("||chrome^", output)
 
     def test_fixed_regex_suffix_is_preserved_as_safe_domain_superset(self):
-        pattern = r"^r+[0-9]+(---|\\.)sn-(2x3|ni5|j5o)\\w{5}\\.xn--ngstr-lra8j\\.com$"
+        pattern = r"^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.xn--ngstr-lra8j\.com$"
         self.assertEqual(regexp_fixed_suffix(pattern), "xn--ngstr-lra8j.com")
         output, stats = render_autoproxy(
             CORE + (DomainRule("regexp", pattern, frozenset()),),
