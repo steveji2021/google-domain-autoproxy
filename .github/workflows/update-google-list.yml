@@ -1,0 +1,47 @@
+name: Update Google AutoProxy list
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-google-autoproxy
+  cancel-in-progress: false
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Generate AutoProxy list
+        run: python scripts/build_google_autoproxy.py
+
+      - name: Commit changes when the list changed
+        run: |
+          if git diff --quiet -- google-autoproxy.txt; then
+            echo "Google domain list is unchanged."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add google-autoproxy.txt
+          git commit -m "Update Google AutoProxy domain list"
+          git push
