@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
-from pathlib import Path
 
 BASE_URL = "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/"
 OUTPUT = Path("google-autoproxy.txt")
@@ -38,6 +38,7 @@ def visit(category: str) -> None:
     if not category or category in visited:
         return
     visited.add(category)
+
     try:
         source = fetch(category)
     except (URLError, TimeoutError, OSError) as exc:
@@ -48,14 +49,26 @@ def visit(category: str) -> None:
         if not line:
             continue
 
-        if line.startswith("include:"):
-            visit(line.partition(":")[2])
+        # Attributes (for example @cn or @ads) follow the rule token.
+        token = line.split()[0]
+
+        if token.startswith("include:"):
+            visit(token.partition(":")[2])
             continue
 
-        kind, sep, value = line.partition(":")
-        if not sep:
-            # Ignore unknown future syntax rather than guessing its semantics.
-            unsupported.add(line)
+        if token.startswith("domain:"):
+            kind, value = "domain", token.partition(":")[2]
+        elif token.startswith("full:"):
+            kind, value = "full", token.partition(":")[2]
+        elif token.startswith("keyword:"):
+            kind, value = "keyword", token.partition(":")[2]
+        elif token.startswith("regexp:"):
+            kind, value = "regexp", token.partition(":")[2]
+        elif ":" not in token:
+            # V2Fly explicitly allows a bare domain as shorthand for domain:.
+            kind, value = "domain", token
+        else:
+            unsupported.add(token)
             continue
 
         value = value.strip().lower().rstrip(".")
@@ -65,15 +78,20 @@ def visit(category: str) -> None:
             exact_rules.add(value)
         elif kind in {"keyword", "regexp"}:
             # AutoProxy cannot faithfully represent arbitrary substring/regex rules.
-            unsupported.add(line)
+            unsupported.add(token)
         else:
-            unsupported.add(line)
+            unsupported.add(token)
 
 
 def main() -> int:
     visit("google")
-    if not domain_rules and not exact_rules:
-        raise RuntimeError("No valid domain entries were found; refusing to publish an empty list.")
+
+    # Fail safely if an upstream format change or fetch issue causes a tiny list.
+    if len(domain_rules) + len(exact_rules) < 100:
+        raise RuntimeError(
+            f"Only {len(domain_rules) + len(exact_rules)} rules were parsed; "
+            "expected at least 100. Refusing to publish an incomplete list."
+        )
 
     lines = [
         "[AutoProxy 0.2.9]",
@@ -83,9 +101,9 @@ def main() -> int:
         "! Generated automatically by scripts/build_google_autoproxy.py",
         "",
     ]
-    # domain: means the domain and all subdomains.
+    # domain: and bare entries match the domain and all subdomains.
     lines.extend(f"||{domain}^" for domain in sorted(domain_rules))
-    # full: means exactly this hostname, not its subdomains.
+    # full: matches exactly this hostname, not its subdomains.
     lines.extend(f"|{domain}|" for domain in sorted(exact_rules))
     OUTPUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -95,7 +113,7 @@ def main() -> int:
     print(f"Skipped unsupported entries: {len(unsupported)}")
     print(f"Wrote {OUTPUT} ({OUTPUT.stat().st_size} bytes)")
     if unsupported:
-        print("Some source entries use syntax AutoProxy cannot represent; see workflow log.")
+        print("Some keyword/regexp or unsupported entries were skipped.")
     return 0
 
 
