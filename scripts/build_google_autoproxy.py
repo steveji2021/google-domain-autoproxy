@@ -183,7 +183,9 @@ def is_covered_by_domain(host: str, domain_roots: set[str]) -> bool:
     return any(host == root or host.endswith("." + root) for root in domain_roots)
 
 
-def render_autoproxy(\n    rules: tuple[DomainRule, ...], min_rule_count: int = MIN_RULE_COUNT\n) -> tuple[str, dict[str, int]]:
+def render_autoproxy(
+    rules: tuple[DomainRule, ...], min_rule_count: int = MIN_RULE_COUNT
+) -> tuple[str, dict[str, int]]:
     domain_roots = {rule.value for rule in rules if rule.kind == "domain"}
     exact_hosts = {rule.value for rule in rules if rule.kind == "full"}
     keyword_rules = {rule.value for rule in rules if rule.kind == "keyword"}
