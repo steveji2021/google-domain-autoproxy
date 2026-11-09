@@ -1,3 +1,4 @@
+import re
 import unittest
 
 from build_google_autoproxy import (
@@ -71,9 +72,21 @@ class ConverterTests(unittest.TestCase):
             DomainRule("full", "endpoint.example.net", frozenset()),
         )
         output, _ = render_autoproxy(rules, min_rule_count=1)
-        for scheme in ("http://", "https://", "ws://", "wss://"):
-            self.assertIn(f"|{scheme}endpoint.example.net^", output)
-        self.assertNotIn("|endpoint.example.net|", output)
+        filters = [line for line in output.splitlines() if line.startswith("/")]
+        self.assertEqual(len(filters), 1)
+        pattern = re.compile(filters[0][1:-1])
+        for scheme in ("http", "https", "ws", "wss"):
+            for suffix in ("", "/", ":8443/path", "?q=1", "#fragment"):
+                self.assertIsNotNone(pattern.search(f"{scheme}://endpoint.example.net{suffix}"))
+        for url in (
+            "https://sub.endpoint.example.net/",
+            "https://endpoint.example.net.evil/",
+            "https://endpoint.example.netx/",
+            "https://endpoint.example.net@evil.example/",
+            "https://evil.example/endpoint.example.net",
+            "ftp://endpoint.example.net/",
+        ):
+            self.assertIsNone(pattern.search(url), url)
 
     def test_full_host_is_omitted_when_parent_domain_already_covers_it(self):
         rules = CORE + (
@@ -81,16 +94,16 @@ class ConverterTests(unittest.TestCase):
             DomainRule("full", "api.example.net", frozenset()),
         )
         output, _ = render_autoproxy(rules, min_rule_count=1)
-        self.assertIn("||example.net^", output)
-        self.assertNotIn("|https://api.example.net^", output)
+        self.assertIn("||example.net", output)
+        self.assertNotIn("api.example.net", output)
 
     def test_single_label_tld_becomes_suffix_rule(self):
         output, _ = render_autoproxy(CORE + (
             DomainRule("domain", "google", frozenset()),
             DomainRule("domain", "chrome", frozenset()),
         ), min_rule_count=1)
-        self.assertIn("||google^", output)
-        self.assertIn("||chrome^", output)
+        self.assertIn("||google", output)
+        self.assertIn("||chrome", output)
 
     def test_fixed_regex_suffix_is_preserved_as_safe_domain_superset(self):
         pattern = r"^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.xn--ngstr-lra8j\.com$"
@@ -99,7 +112,7 @@ class ConverterTests(unittest.TestCase):
             CORE + (DomainRule("regexp", pattern, frozenset()),),
             min_rule_count=1,
         )
-        self.assertIn("||xn--ngstr-lra8j.com^", output)
+        self.assertIn("||xn--ngstr-lra8j.com", output)
         self.assertEqual(stats["regex_rules_broadened_to_suffix"], 1)
 
     def test_unconvertible_regex_fails_instead_of_being_dropped(self):
@@ -115,6 +128,21 @@ class ConverterTests(unittest.TestCase):
                 CORE + (DomainRule("keyword", "google", frozenset()),),
                 min_rule_count=1,
             )
+
+
+    def test_zeroomega_domain_matching_has_no_literal_caret(self):
+        output, _ = render_autoproxy(CORE + (
+            DomainRule("domain", "youtube.com", frozenset()),
+            DomainRule("domain", "ytimg.com", frozenset()),
+        ), min_rule_count=1)
+        roots = [line[2:] for line in output.splitlines() if line.startswith("||")]
+        self.assertTrue(all("^" not in root for root in roots))
+        # ZeroOmega maps ||domain to *.domain, matching root and subdomains.
+        patterns = [re.compile(r"(?:^|\.)" + re.escape(root) + r"$") for root in roots]
+        for host in ("google.com", "www.google.com", "www.youtube.com", "i.ytimg.com"):
+            self.assertTrue(any(pattern.search(host) for pattern in patterns), host)
+        for host in ("google.com.evil.example", "notgoogle.com", "www.bbc.com"):
+            self.assertFalse(any(pattern.search(host) for pattern in patterns), host)
 
 
 if __name__ == "__main__":

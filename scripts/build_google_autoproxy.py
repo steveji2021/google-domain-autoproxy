@@ -225,13 +225,16 @@ def render_autoproxy(
         host for host in exact_hosts if not is_covered_by_domain(host, domain_roots)
     }
 
-    filters = {f"||{domain}^" for domain in domain_roots}
-    # AutoProxy matches complete URLs. Anchor each scheme so full: entries match
-    # the exact hostname (including an optional port/path), not a literal bare
-    # hostname string and not its subdomains.
+    # ZeroOmega treats Adblock-style ^ separators as literal characters.
+    filters = {f"||{domain}" for domain in domain_roots}
+    # Use AutoProxy's explicit regex syntax for exact hosts. A plain URL
+    # prefix would also match endpoint.example.net.evil or endpoint.example.netx.
     for host in uncovered_exact_hosts:
-        for scheme in ("http://", "https://", "ws://", "wss://"):
-            filters.add(f"|{scheme}{host}^")
+        filters.add(
+            r"/^(?:https?|wss?):\/\/"
+            + re.escape(host)
+            + r"(?::[0-9]+)?(?:[\/?#]|$)/"
+        )
 
     required_roots = {"google.com", "googleapis.com", "gstatic.com", "googleusercontent.com"}
     missing_roots = required_roots - domain_roots

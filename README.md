@@ -22,12 +22,16 @@ The workflow:
 1. Fetches V2Fly's `data/google` category.
 2. Recursively expands `include:` categories and honors inclusion attribute filters.
 3. Converts bare and `domain:` entries to domain-and-subdomain filters, including single-label TLD categories such as `.google` and `.chrome`.
-4. Converts `full:` entries to URL-anchored exact-host filters for HTTP, HTTPS, WS, and WSS. Exact-host filters already covered by a broader domain rule are omitted as redundant.
+4. Converts `full:` entries to explicit URL regex filters for HTTP, HTTPS, WS, and WSS, with hostname boundaries and optional ports. Exact-host filters already covered by a broader domain rule are omitted as redundant.
 5. Converts regex rules with a fixed DNS suffix to a safe parent-domain routing rule. This can proxy a broader set of hosts under that suffix, but it will not miss the regex-matched hosts.
 6. Fails rather than silently publishing if an unsupported keyword rule or an unrecognized regex is added upstream.
 7. Runs regression tests before generation and commits `google-autoproxy.txt` only when its contents change.
 
 The workflow uses the repository's built-in `GITHUB_TOKEN`; no personal access token or Gist is needed.
+
+## ZeroOmega compatibility
+
+Domain rules use `||google.com` without an Adblock-style trailing `^`: ZeroOmega treats that character literally. Exact hosts use `/regex/` filters with explicit hostname boundaries, rather than URL prefix wildcards.
 
 ## Conversion limitations
 
